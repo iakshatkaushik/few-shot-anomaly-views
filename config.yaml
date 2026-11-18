@@ -1,0 +1,127 @@
+# All hyper-parameters live here. The hash of this config is stored with every result row,
+# so changing anything here gives new rows a new hash.
+
+paths:
+  data_root: data
+  index_dir: data/index
+  cache_root: features/cache        # large (~1 TB for everything); a symlink to a fast local disk works well
+  results_dir: results
+  logs_dir: logs
+
+seed: 0
+
+datasets:
+  mvtec_ad:   {categories: [bottle, cable, capsule, carpet, grid, hazelnut, leather, metal_nut, pill, screw, tile, toothbrush, transistor, wood, zipper],
+               textures: [carpet, grid, leather, tile, wood]}
+  visa:       {categories: [candle, capsules, cashew, chewinggum, fryum, macaroni1, macaroni2, pcb1, pcb2, pcb3, pcb4, pipe_fryum],
+               textures: []}
+  mpdd:       {categories: [bracket_black, bracket_brown, bracket_white, connector, metal_plate, tubes],
+               textures: []}
+  mvtec_loco: {categories: [breakfast_box, juice_bottle, pushpins, screw_bag, splicing_connectors],
+               textures: []}
+  mvtec_ad2:  {categories: [can, fabric, fruit_jelly, rice, sheet_metal, vial, wallplugs, walnuts],
+               textures: [fabric]}
+
+draws:
+  n_draws: 10
+  shots: [1, 2, 4]
+  seed_formula: "1000*draw + 10*k"   # implemented in src/draws.py
+
+encoders:
+  dinov2_vitb14:     {timm: vit_base_patch14_dinov2.lvd142m,        img_size: 448, patch: 14, dim: 768,
+                      sets: {b9_12: {blocks: [9, 10, 11, 12], norm: true, l2: true}, last: {blocks: [12], norm: true, l2: true}}}
+  dinov2_vits14:     {timm: vit_small_patch14_dinov2.lvd142m,       img_size: 448, patch: 14, dim: 384,
+                      sets: {b9_12: {blocks: [9, 10, 11, 12], norm: true, l2: true}, last: {blocks: [12], norm: true, l2: true},
+                             last_raw: {blocks: [12], norm: true, l2: false}}}   # last_raw: AnomalyDINO (PCA masking needs unnormalised tokens)
+  dinov2_vits14_672: {timm: vit_small_patch14_dinov2.lvd142m,       img_size: 672, patch: 14, dim: 384,
+                      sets: {last_raw: {blocks: [12], norm: true, l2: false}}}   # sanity check only (AnomalyDINO at 672)
+  dinov3_vitb16:     {timm: vit_base_patch16_dinov3.lvd1689m,       img_size: 448, patch: 16, dim: 768,
+                      sets: {b9_12: {blocks: [9, 10, 11, 12], norm: true, l2: true}, last: {blocks: [12], norm: true, l2: true}}}
+  dinov3_vitb16_672: {timm: vit_base_patch16_dinov3.lvd1689m,       img_size: 672, patch: 16, dim: 768,
+                      sets: {b9_12: {blocks: [9, 10, 11, 12], norm: true, l2: true}}}   # development runs only
+  dinov2_vitg14_reg: {timm: vit_giant_patch14_reg4_dinov2.lvd142m,  img_size: 672, patch: 14, dim: 1536,
+                      # SubspaceAD range: HF hidden_states[-12..-18] of 41 = outputs of blocks 23..29 (1-indexed), no final norm
+                      sets: {sub23_29: {blocks: [23, 24, 25, 26, 27, 28, 29], norm: false, l2: false},
+                             last: {blocks: [40], norm: true, l2: true},
+                             late4: {blocks: [37, 38, 39, 40], norm: true, l2: true},   # analogue of ViT-B {9..12} for our method
+                             l16: {blocks: [16], norm: false, l2: false}, l20: {blocks: [20], norm: false, l2: false},
+                             l24: {blocks: [24], norm: false, l2: false}, l28: {blocks: [28], norm: false, l2: false},
+                             l32: {blocks: [32], norm: false, l2: false}}}   # l16..l32: Flownomaly target layers (0-idx 15,19,23,27,31)
+
+extract:
+  probe_start_batch: 32
+  probe_max_batch: 2048
+  probe_mem_limit_gb: 70
+  num_workers: 16
+  prefetch_factor: 4
+  compile_mode: max-autotune
+  shard_images: 512
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+views:
+  n_views: 16              # view 0 is the identity
+  max_shift_tokens: 2      # translations by whole patch strides in [-2, 2]
+  jitter_prob: 0.5
+  jitter_strength: 0.1     # brightness / contrast / saturation factor range 1 +- 0.1
+  blur_prob: 0.3
+  blur_sigma: [0.5, 1.0]
+  n_rotations: 30          # arbitrary-angle rotations, memory-only candidates
+  rotation_max_deg: 345
+  rotation_valid_frac: 0.5 # a rotated token is kept only if >= 50% of its pixels come from the image
+
+synth:
+  families: [cutpaste, nsa, perlin]
+  per_view: 1              # one synthetic image per family per view
+  min_cov: 0.5             # filter (a): token mask coverage
+  min_change: 0.03         # filter (a): mean absolute intensity change in [0,1] units
+  perlin_scale: [0, 6]
+  perlin_threshold: 0.5
+  perlin_beta: [0.0, 0.8]
+  cutpaste_area: [0.02, 0.15]
+  cutpaste_aspect: [0.3, 3.3]
+  nsa_area: [0.01, 0.10]
+  dtd_root: data/dtd/images
+
+method:
+  head_hidden: 512
+  d: 128
+  tau: 0.1
+  unif_weight: 0.1
+  lr: 1.0e-3
+  weight_decay: 1.0e-4
+  anchors: 8192
+  steps: 300
+  m: 2048
+  band_discard: 0.05
+  refresh_every: 50
+  max_mining_candidates: 65536
+  part_negatives: 32
+  part_min_dist: 8         # grid units
+  unif_subset: 2048
+  mean_shift: true
+  negatives: band          # band | random | unfiltered | extreme
+  part_aware: true
+  knn_k: 1
+  top_frac: 0.01
+  map_sigma: 4
+  eval_res: 448
+  head_seeds: [0, 1, 2]
+
+selection:
+  tau: [0.05, 0.1, 0.2]
+  d: [64, 128, 256]
+  quantile: [0.005, 0.01, 0.02]
+  gate_quantile: 0.95      # rotations "look normal" if their median LOVO score <= this quantile of unrotated LOVO scores
+  threshold_fpr: 0.05      # operating threshold for SegF1 when one is required
+
+eval:
+  pro_fpr: [0.3, 0.05]
+  pro_thresholds: 200
+
+baselines:
+  anomalydino: {encoder: dinov2_vits14, smaller_edge: 448, rotations: [0, 45, 90, 135, 180, 225, 270, 315], mask_threshold: 10, preprocess: agnostic}
+  subspacead:  {encoder: dinov2_vitg14_reg, set: sub23_29, aug_count: 30, rot_max: 345, pca_ev: 0.99, no_aug_categories: [transistor], seed: 42}
+  patchcore:   {backbone: wide_resnet50_2, layers: [layer2, layer3], resize: 256, coreset_ratio: 0.1, num_neighbors: 9}   # anomalib default: Resize(256,256), no crop
+  winclip:     {model: ViT-B-16-plus-240, pretrained: laion400m_e31, img_size: 240, scales: [2, 3]}
+  flownomaly:  {encoder: dinov2_vitg14_reg, layers_1idx: [16, 20, 24, 28, 32]}
