@@ -157,8 +157,9 @@ This writes `results/summary.csv`, `results/tests.csv` and `results/per_category
   shots. The `ours_oracle` rows select on test labels and exist only to measure the selection gap.
 - **Development split.** VMF was designed on MVTec AD and VisA, draws 0-4, k = 1. Those cells are reported on
   draws 5-9. The development runs are in `results/explore.jsonl`.
-- **Evaluation.** All methods share one evaluation code path: maps at 448 x 448, Gaussian smoothing with
-  sigma 4, and the same masks and metrics.
+- **Evaluation.** Every map is resized to 448 x 448 and scored by the same metric code against the same masks.
+  Our methods, AnomalyDINO, PatchCore and VisionAD smooth the maps with a Gaussian (sigma 4 px); SubspaceAD,
+  WinCLIP+ and Flownomaly keep the post-processing of their official code.
 - **Statistics.** Paired Wilcoxon signed-rank tests over draws, Holm-corrected across methods (`src/stats.py`).
 - **Baselines.** Re-implemented from the official code (anomalib for PatchCore and WinCLIP+). The docstring at the
   top of each file in `src/baselines/` lists the settings used and every deviation from the original.
