@@ -20,12 +20,12 @@ asks a simple question: **should those views train a representation, or should t
 Both options run on the same frozen encoder, with the same scoring rule, shot draws and evaluation code.
 
 **A. Views as a training signal.** A small patch-level contrastive head is trained on the views (positives: the
-same patch in another view; negatives: synthetic defects). Test patches are scored by 1-NN distance in the head's
-space.
+same patch in another view; negatives: synthetic defects). Its temperature, output size and image-score fraction are
+selected per category without labels. Test patches are scored by 1-NN distance in the head's space.
 
-**B. Views as memory.** The raw patch tokens of all views and rotations go straight into the nearest-neighbour
-memory, with no training. **VMF** averages three such memories (DINOv3 ViT-B/16 at 448 and 672 px, DINOv2
-ViT-G/14 at 672 px).
+**B. Views as memory.** The raw patch tokens of the views go straight into the nearest-neighbour memory, with no
+training. **VMF** averages three such memories, each holding 16 views and 30 rotations per shot (DINOv3 ViT-B/16 at
+448 and 672 px, DINOv2 ViT-G/14 at 672 px).
 
 The evaluation covers **5 industrial benchmarks** (MVTec AD, VisA, MPDD, MVTec LOCO AD, MVTec AD 2) at 1, 2 and
 4 shots, with **10 random shot draws** each. **6 published methods** are re-implemented and run on exactly the
@@ -152,9 +152,15 @@ This writes `results/summary.csv`, `results/tests.csv` and `results/per_category
 
 - **Shot draws.** Seed `1000 * draw + 10 * k`, 10 draws for each k in {1, 2, 4}. Every method gets exactly the
   same shots.
+- **Features.** Tokens are the mean of blocks 9-12 (ViT-B) or 37-40 (ViT-G), each after the final LayerNorm,
+  L2-normalised. Patches are scored by 1-NN cosine distance; the image score is the mean of the top 1% of the map
+  for VMF and the controls.
 - **No test leakage.** No test image or label is used for training, model selection or thresholds. The head's
-  temperature, width and aggregation, and the rotation gate, are chosen by leave-one-view-out consistency on the
-  shots. The `ours_oracle` rows select on test labels and exist only to measure the selection gap.
+  temperature (0.05, 0.1, 0.2), output size (64, 128, 256) and image-score fraction (0.5, 1, 2 %) are selected per
+  category by the lowest dispersion of leave-one-view-out image scores on the shots. The `ours_oracle` rows select
+  on test labels and exist only to measure the selection gap.
+- **Rotations.** VMF always stores the 30 rotations. The head and the controls add them only when they score like
+  normal views (median at or below the 95th percentile of the views' leave-one-view-out scores; 15 of 1,380 cells).
 - **Development split.** VMF was designed on MVTec AD and VisA, draws 0-4, k = 1. Those cells are reported on
   draws 5-9. The development runs are in `results/explore.jsonl`.
 - **Evaluation.** Every map is resized to 448 x 448 and scored by the same metric code against the same masks.
